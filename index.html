@@ -96,7 +96,7 @@ body{padding:0}
   <div class="form-panel">
     <div class="brand"><div class="wordmark">Listed.</div></div>
 
-    <div id="signup-view" class="view">
+    <div id="signup-view" class="view hidden">
       <div class="auth-title">Create account</div>
       <div class="auth-sub">Already have an account? <span class="link" onclick="showView('login')">Sign in</span></div>
 
@@ -124,7 +124,7 @@ body{padding:0}
       </button>
     </div>
 
-    <div id="login-view" class="view hidden">
+    <div id="login-view" class="view">
       <div class="auth-title">Sign in</div>
       <div class="auth-sub">Don't have an account? <span class="link" onclick="showView('signup')">Create now</span></div>
 
@@ -190,7 +190,7 @@ setTimeout(async () => {
   } catch(e) {}
 }, 200);
 
-let currentView = 'signup';
+let currentView = 'login';
 function showView(name) {
   ['signup', 'login'].forEach(v => {
     document.getElementById(v + '-view').classList.toggle('hidden', v !== name);

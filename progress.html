@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Listed. — Progress</title>
+<link rel="stylesheet" href="style.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="supabase-client.js"></script>
+<style>
+.shell{min-height:100dvh}
+.header{padding:52px 28px 0}
+.title{font-family:var(--display);font-size:56px;line-height:.92;font-weight:600;letter-spacing:-1px;margin-bottom:4px}
+.title em{font-style:italic;color:var(--muted)}
+.sub{font-size:13px;font-weight:600;color:var(--muted);margin-bottom:10px}
+.zip-tag{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;background:var(--off);border:1px solid var(--border-mid);border-radius:20px;padding:5px 12px;color:var(--muted);margin-bottom:28px}
+.zip-dot{width:6px;height:6px;border-radius:50%;background:#16A34A}
+.ms-list{padding:0 28px}
+.ms{display:flex;gap:16px;align-items:flex-start;padding:20px 0;border-bottom:1px solid var(--line)}
+.ms:last-child{border-bottom:none}
+.ms-node{width:22px;height:22px;border-radius:50%;flex-shrink:0;margin-top:2px;display:flex;align-items:center;justify-content:center}
+.ms-node.done{background:var(--black)}
+.ms-node.here{background:transparent;border:2px solid var(--black)}
+.ms-node.wait{background:var(--line)}
+.ms-check{width:8px;height:8px;border-radius:50%;background:white}
+.ms-dot{width:7px;height:7px;border-radius:50%;background:var(--black)}
+.ms-title{font-size:16px;font-weight:700;color:var(--black);margin-bottom:3px;margin-top:1px}
+.ms-title.dim{color:var(--muted);font-weight:500}
+.ms-sub{font-size:13px;font-weight:500;color:var(--muted);line-height:1.5}
+.footer{padding:24px 28px 0}
+.change-zip-btn{width:100%;padding:16px;background:var(--off);border:none;border-radius:16px;font-size:15px;font-weight:700;cursor:pointer;font-family:var(--body);color:var(--black);margin-top:10px;transition:background .15s}
+.change-zip-btn:hover{background:var(--line)}
+.signout-btn{background:none;border:none;font-size:13px;font-weight:600;color:var(--muted);cursor:pointer;text-decoration:underline;text-underline-offset:3px;font-family:var(--body);margin-top:14px;display:block;width:100%;text-align:center}
+/* ZIP MODAL */
+.modal-overlay{position:fixed;inset:0;background:rgba(10,10,10,.5);z-index:200;display:none;align-items:flex-end;justify-content:center}
+.modal-overlay.open{display:flex}
+.modal-box{background:#FAFAF7;border-radius:24px 24px 0 0;padding:32px 28px 48px;width:100%;max-width:430px;animation:slideUp .25s cubic-bezier(.4,0,.2,1)}
+@keyframes slideUp{from{transform:translateY(100%)}to{transform:translateY(0)}}
+.modal-title{font-family:var(--display);font-size:32px;font-weight:600;margin-bottom:20px}
+.modal-label{font-size:11px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:var(--muted);display:block;margin-bottom:8px}
+.modal-input{width:100%;padding:15px 16px;border:1.5px solid rgba(10,10,10,.1);border-radius:14px;font-size:17px;font-family:var(--body);font-weight:600;background:#EFEFEA;color:#0A0A0A;outline:none;-webkit-appearance:none;transition:border-color .15s}
+.modal-input:focus{border-color:#0A0A0A;background:#FAFAF7}
+.modal-actions{display:flex;gap:10px;margin-top:20px}
+.modal-cancel{flex:1;padding:15px;background:#EFEFEA;border:none;border-radius:14px;font-size:15px;cursor:pointer;font-family:var(--body);font-weight:600;color:rgba(10,10,10,.5)}
+.modal-save{flex:2;padding:15px;background:#0A0A0A;border:none;border-radius:14px;font-size:15px;font-weight:700;cursor:pointer;font-family:var(--body);color:white}
+.modal-err{font-size:12px;color:#B91C1C;margin-top:8px;display:none;font-weight:600}
+.modal-err.show{display:block}
+</style>
+</head>
+<body>
+<div class="shell fade">
+  <div class="header">
+    <div class="title">First listing<br><em>incoming.</em></div>
+    <div class="sub">Agents who call daily list within 60 days.</div>
+    <div class="zip-tag"><div class="zip-dot"></div><span id="zip-label">Your market</span></div>
+  </div>
+  <div class="ms-list" id="ms-list"><div style="padding:20px 0;font-size:14px;color:var(--muted);font-weight:500">Loading...</div></div>
+  <div class="footer">
+    <a class="btn" href="today.html">Back to today</a>
+    <button class="change-zip-btn" onclick="openZipModal()">Change zip code / city</button>
+    <button class="signout-btn" onclick="signOut()">Sign out</button>
+  </div>
+</div>
+
+<!-- ZIP CHANGE MODAL -->
+<div class="modal-overlay" id="zip-modal" onclick="handleOverlayClick(event)">
+  <div class="modal-box">
+    <div class="modal-title">Change territory</div>
+    <label class="modal-label">Zip code or city</label>
+    <input class="modal-input" id="new-zip" type="text" placeholder="94536 or Fremont, CA">
+    <div class="modal-err" id="zip-err">Please enter a zip code or city</div>
+    <div style="font-size:12px;font-weight:500;color:var(--muted);margin-top:10px">Available: 94536 (Fremont) · 94587 (Union City) · 94022 (Los Altos)</div>
+    <div class="modal-actions">
+      <button class="modal-cancel" onclick="closeZipModal()">Cancel</button>
+      <button class="modal-save" id="zip-save-btn" onclick="saveZip()">Save</button>
+    </div>
+  </div>
+</div>
+
+<nav class="nav">
+  <a href="today.html"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg><span>Today</span></a>
+  <a href="dial.html"><svg viewBox="0 0 24 24"><path d="M5 4h4l2 4-2.5 1.5A11 11 0 0014.5 15L16 12.5l4 2V18a2 2 0 01-2 2A16 16 0 014 6a2 2 0 012-2"/></svg><span>Calls</span></a>
+  <a href="contacts.html"><svg viewBox="0 0 24 24"><circle cx="9" cy="7" r="4"/><path d="M3 21v-2a4 4 0 014-4h4a4 4 0 014 4v2M16 3.13a4 4 0 010 7.75"/><path d="M21 21v-2a4 4 0 00-3-3.87"/></svg><span>Contacts</span></a>
+  <a class="active" href="progress.html"><svg viewBox="0 0 24 24"><path d="M3 12h4l3 8 4-16 3 8h4"/></svg><span>Progress</span></a>
+</nav>
+
+<script>
+let USER_ID = null;
+
+// Modal functions — global scope
+function openZipModal() {
+  document.getElementById('zip-modal').classList.add('open');
+  document.getElementById('new-zip').focus();
+}
+function closeZipModal() {
+  document.getElementById('zip-modal').classList.remove('open');
+  document.getElementById('zip-err').classList.remove('show');
+  document.getElementById('new-zip').value = '';
+}
+function handleOverlayClick(e) {
+  if (e.target === document.getElementById('zip-modal')) closeZipModal();
+}
+async function saveZip() {
+  const val = document.getElementById('new-zip').value.trim();
+  const errEl = document.getElementById('zip-err');
+  const btn = document.getElementById('zip-save-btn');
+  errEl.classList.remove('show');
+  if (!val) { errEl.classList.add('show'); return; }
+  btn.textContent = 'Saving...'; btn.disabled = true;
+  const isZip = /^\d{5}$/.test(val);
+  if (isZip) {
+    // Check if this zip exists in DB
+    const { data: zipCheck } = await db.from('homeowners').select('zip').eq('zip', val).limit(1);
+    if (!zipCheck || zipCheck.length === 0) {
+      // Check each candidate zip
+      const candidates = ['94022','94536','94587','94538','94539','94540','94541','94542','94543','94544','94545'];
+      const checks = await Promise.all(candidates.map(z =>
+        db.from('homeowners').select('zip').eq('zip', z).limit(1).then(({data}) => data?.length > 0 ? z : null)
+      ));
+      const available = checks.filter(Boolean).join(', ') || 'none loaded yet';
+      errEl.textContent = `No data for ${val}. Available: ${available}`;
+      errEl.classList.add('show');
+      btn.textContent = 'Save'; btn.disabled = false;
+      return;
+    }
+  }
+  const { error } = await db.from('users').update({ zip: isZip ? val : '', city: val }).eq('id', USER_ID);
+  if (error) { errEl.textContent = 'Error: ' + error.message; errEl.classList.add('show'); btn.textContent = 'Save'; btn.disabled = false; return; }
+  closeZipModal();
+  window.location.reload();
+}
+async function signOut() { await db.auth.signOut(); window.location.href = 'index.html'; }
+
+document.getElementById('new-zip').addEventListener('keydown', e => { if (e.key === 'Enter') saveZip(); });
+
+async function init() {
+  const { data: { session } } = await db.auth.getSession();
+  if (!session) { window.location.href = 'index.html'; return; }
+  USER_ID = session.user.id;
+
+  const { data: profile } = await db.from('users').select('*').eq('id', USER_ID).single();
+  if (!profile) { window.location.href = 'onboarding.html'; return; }
+
+  const zipDisplay = profile.zip ? `${profile.zip} · ${profile.city}` : profile.city;
+  document.getElementById('zip-label').textContent = zipDisplay || 'Not set';
+
+  const { data: calls } = await db.from('calls').select('outcome').eq('user_id', USER_ID);
+  const { data: sessions } = await db.from('sessions').select('*').eq('user_id', USER_ID);
+  const totalCalls = calls?.length || 0;
+  const hotLeads = calls?.filter(c => c.outcome === 'sell').length || 0;
+  const totalSessions = sessions?.length || 0;
+
+  function ms(type, title, sub, dim = false) {
+    const n = type === 'done' ? `<div class="ms-node done"><div class="ms-check"></div></div>`
+      : type === 'here' ? `<div class="ms-node here"><div class="ms-dot"></div></div>`
+      : `<div class="ms-node wait"></div>`;
+    return `<div class="ms">${n}<div><div class="ms-title${dim ? ' dim' : ''}">${title}</div><div class="ms-sub">${sub}</div></div></div>`;
+  }
+
+  let html = '';
+  html += ms('done', `Welcome, ${(profile.name || 'Agent').split(' ')[0]}`, 'Account active');
+  html += totalSessions > 0
+    ? ms('done', 'First 50 calls', `${totalCalls} total calls · ${totalSessions} session${totalSessions !== 1 ? 's' : ''}`)
+    : ms('here', 'First 50 calls', 'Start your session today — attack the day');
+  html += hotLeads > 0
+    ? ms('done', 'First warm lead', `${hotLeads} hot lead${hotLeads !== 1 ? 's' : ''} so far`)
+    : totalSessions > 0 ? ms('here', 'First warm lead', "Keep dialing — they're out there")
+    : ms('wait', 'First warm lead', 'Comes after your first session', true);
+  html += ms('wait', 'Listing appointment', '~8–12 warm leads away', true);
+  html += ms('wait', 'Listing #1 signed', "This is why you're here.", true);
+  document.getElementById('ms-list').innerHTML = html;
+}
+
+init();
+</script>
+</body>
+</html>

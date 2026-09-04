@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Listed. — Signing in...</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="supabase-client.js"></script>
+<style>
+body{font-family:system-ui,sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;background:#F8F7F2;margin:0;flex-direction:column;gap:8px}
+.msg{color:rgba(0,0,0,.4);font-size:15px;font-weight:500}
+.sub{color:rgba(0,0,0,.25);font-size:12px}
+</style>
+</head>
+<body>
+<div class="msg">Signing you in...</div>
+<div class="sub" id="sub">Processing...</div>
+<script>
+async function handleCallback(){
+  const sub = document.getElementById('sub');
+
+  // Supabase automatically processes the hash fragment for implicit flow
+  // Just wait a moment then check for session
+  await new Promise(r => setTimeout(r, 1500));
+
+  try {
+    const { data: { session }, error } = await db.auth.getSession();
+
+    if (error) {
+      sub.textContent = 'Error: ' + error.message;
+      setTimeout(() => window.location.href = 'index.html', 2000);
+      return;
+    }
+
+    if (!session) {
+      sub.textContent = 'No session found — redirecting...';
+      setTimeout(() => window.location.href = 'index.html', 2000);
+      return;
+    }
+
+    sub.textContent = 'Logged in! Setting up your account...';
+    const user = session.user;
+
+    // Check if profile exists
+    const { data: existing } = await db.from('users')
+      .select('id,zip,city')
+      .eq('id', user.id)
+      .single();
+
+    if (!existing) {
+      // Create profile
+      await db.from('users').insert({
+        id: user.id,
+        name: user.user_metadata?.full_name || user.email || 'Agent',
+        zip: '',
+        city: ''
+      });
+      sub.textContent = 'Account created! Redirecting...';
+      window.location.href = 'onboarding.html';
+    } else if (!existing.zip && !existing.city) {
+      sub.textContent = 'Almost there...';
+      window.location.href = 'onboarding.html';
+    } else {
+      sub.textContent = 'Welcome back!';
+      window.location.href = 'today.html';
+    }
+
+  } catch(e) {
+    sub.textContent = 'Error: ' + e.message;
+    setTimeout(() => window.location.href = 'index.html', 2000);
+  }
+}
+
+handleCallback();
+</script>
+</body>
+</html>

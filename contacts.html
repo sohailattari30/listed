@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Listed. — Contacts</title>
+<link rel="stylesheet" href="style.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="supabase-client.js"></script>
+<style>
+.shell{min-height:100dvh}
+.header{padding:52px 28px 16px}
+.title{font-family:var(--display);font-size:56px;line-height:.92;font-weight:600;letter-spacing:-1px;margin-bottom:4px}
+.title em{font-style:italic;color:var(--muted)}
+.sub{font-size:13px;font-weight:600;color:var(--muted);margin-bottom:20px}
+.cta{padding:0 28px 16px}
+.list{padding:0 28px}
+.c-row{display:flex;align-items:flex-start;gap:14px;padding:16px 0;border-bottom:1px solid var(--line);position:relative}
+.c-row:last-child{border-bottom:none}
+.av{width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;flex-shrink:0;margin-top:1px}
+.av.hot{background:var(--accent-light);color:var(--accent)}
+.av.vm{background:var(--amber-light);color:var(--amber)}
+.av.def{background:#EBEBEB;color:var(--muted)}
+.c-info{flex:1;min-width:0}
+.c-name{font-size:15px;font-weight:700;margin-bottom:2px}
+.c-addr{font-size:12px;font-weight:500;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-bottom:2px}
+.c-phone{font-size:12px;font-weight:500;color:var(--muted);margin-bottom:6px}
+.del{position:absolute;top:16px;right:0;background:none;border:none;cursor:pointer;font-size:18px;color:var(--muted);opacity:.4;padding:4px}
+.del:hover{opacity:.8}
+.empty{font-size:14px;font-weight:500;color:var(--muted);padding:24px 0}
+.loading-msg{font-size:14px;color:var(--muted);padding:24px 28px}
+</style>
+</head>
+<body>
+<div class="shell fade">
+  <div class="header">
+    <div class="title">Your<br><em>network.</em></div>
+    <div class="sub" id="sub-count">Loading...</div>
+  </div>
+  <div class="cta"><button class="btn" onclick="openModal()">+ Add contact</button></div>
+  <div class="list" id="list"><div class="loading-msg">Loading contacts...</div></div>
+</div>
+
+<div class="backdrop hidden" id="modal">
+  <div class="modal">
+    <div class="modal-title">Add contact</div>
+    <div class="field"><label>Name</label><input id="m-name" type="text" placeholder="John Smith"></div>
+    <div class="field"><label>Address</label><input id="m-addr" type="text" placeholder="123 Main St"></div>
+    <div class="field"><label>Phone</label><input id="m-phone" type="tel" placeholder="(510) 000-0000"></div>
+    <div class="field"><label>Status</label>
+      <select id="m-status">
+        <option value="Hot lead">Hot lead — wants to sell</option>
+        <option value="Callback">Schedule callback</option>
+        <option value="Long-term">Long-term prospect</option>
+        <option value="Met in person">Met in person</option>
+      </select>
+    </div>
+    <div class="modal-actions">
+      <button class="modal-cancel" onclick="closeModal()">Cancel</button>
+      <button class="modal-save" onclick="saveContact()">Save</button>
+    </div>
+  </div>
+</div>
+
+<nav class="nav">
+  <a href="today.html"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg><span>Today</span></a>
+  <a href="dial.html"><svg viewBox="0 0 24 24"><path d="M5 4h4l2 4-2.5 1.5A11 11 0 0014.5 15L16 12.5l4 2V18a2 2 0 01-2 2A16 16 0 014 6a2 2 0 012-2"/></svg><span>Calls</span></a>
+  <a class="active" href="contacts.html"><svg viewBox="0 0 24 24"><circle cx="9" cy="7" r="4"/><path d="M3 21v-2a4 4 0 014-4h4a4 4 0 014 4v2M16 3.13a4 4 0 010 7.75"/><path d="M21 21v-2a4 4 0 00-3-3.87"/></svg><span>Contacts</span></a>
+  <a href="progress.html"><svg viewBox="0 0 24 24"><path d="M3 12h4l3 8 4-16 3 8h4"/></svg><span>Progress</span></a>
+</nav>
+
+<script>
+let USER=null,CONTACTS=[];
+function initials(n){return(n||'').split(/\s+/).slice(0,2).map(w=>w[0]?.toUpperCase()||'').join('');}
+
+async function init(){
+  const{data:{session}}=await db.auth.getSession();
+  if(!session){window.location.href='index.html';return;}
+  USER=session.user;
+  await loadContacts();
+}
+
+async function loadContacts(){
+  const{data}=await db.from('contacts').select('*').eq('user_id',USER.id).order('created_at',{ascending:false});
+  CONTACTS=data||[];
+  render();
+}
+
+function render(){
+  document.getElementById('sub-count').textContent=`${CONTACTS.length} contact${CONTACTS.length!==1?'s':''}`;
+  const list=document.getElementById('list');
+  if(!CONTACTS.length){list.innerHTML='<div class="empty">No contacts yet. Add people you connect with.</div>';return;}
+  list.innerHTML=CONTACTS.map((c,i)=>`
+    <div class="c-row">
+      <div class="av ${c.status==='Hot lead'?'hot':c.status==='Callback'?'vm':'def'}">${initials(c.name)}</div>
+      <div class="c-info">
+        <div class="c-name">${c.name}</div>
+        <div class="c-addr">${c.address||'—'}</div>
+        <div class="c-phone">${c.phone||'—'}</div>
+        <span class="tag ${c.status==='Hot lead'?'tag-hot':'tag-vm'}">${c.status}</span>
+      </div>
+      <button class="del" onclick="deleteContact('${c.id}')">×</button>
+    </div>`).join('');
+}
+
+async function deleteContact(id){
+  await db.from('contacts').delete().eq('id',id);
+  await loadContacts();
+}
+
+function openModal(){document.getElementById('modal').classList.remove('hidden');document.getElementById('m-name').focus();}
+function closeModal(){document.getElementById('modal').classList.add('hidden');}
+
+async function saveContact(){
+  const name=document.getElementById('m-name').value.trim();
+  if(!name)return;
+  await db.from('contacts').insert({user_id:USER.id,name,address:document.getElementById('m-addr').value.trim(),phone:document.getElementById('m-phone').value.trim(),status:document.getElementById('m-status').value});
+  closeModal();
+  ['m-name','m-addr','m-phone'].forEach(id=>document.getElementById(id).value='');
+  await loadContacts();
+}
+
+document.getElementById('modal').addEventListener('click',e=>{if(e.target===document.getElementById('modal'))closeModal();});
+init();
+</script>
+</body>
+</html>

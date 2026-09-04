@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Listed.</title>
+<link rel="stylesheet" href="style.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="supabase-client.js"></script>
+<style>
+.shell{padding:60px 28px 52px;justify-content:space-between;min-height:100dvh}
+.wordmark{font-size:13px;font-weight:700;letter-spacing:4px;text-transform:uppercase;color:var(--muted);margin-bottom:52px}
+.headline{font-family:var(--display);font-size:74px;line-height:.9;font-weight:600;letter-spacing:-2px;margin-bottom:18px}
+.headline em{font-style:italic;font-weight:400;color:var(--muted)}
+.desc{font-size:15px;font-weight:500;color:var(--muted);line-height:1.65}
+.bottom{margin-top:auto;padding-top:40px}
+.field{margin-bottom:16px}
+.field label{font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);display:block;margin-bottom:8px}
+.field input{width:100%;background:var(--off);border:1.5px solid var(--line);border-radius:14px;padding:15px 16px;font-size:16px;font-family:var(--body);color:var(--black);outline:none;transition:border-color .15s;-webkit-appearance:none}
+.field input:focus{border-color:var(--black)}
+.field input::placeholder{color:rgba(10,10,10,.25)}
+.btn{width:100%;padding:18px;background:var(--black);color:white;border:none;border-radius:16px;font-size:16px;font-weight:700;cursor:pointer;font-family:var(--body);transition:opacity .15s;margin-top:8px}
+.btn:hover{opacity:.88}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+.toggle{text-align:center;margin-top:16px;font-size:13px;font-weight:500;color:var(--muted)}
+.toggle span{color:var(--black);cursor:pointer;text-decoration:underline;text-underline-offset:3px}
+.err{color:#B91C1C;font-size:13px;font-weight:600;margin-top:10px;text-align:center;display:none}
+.err.show{display:block}
+.fine{font-size:12px;font-weight:500;color:var(--muted);text-align:center;margin-top:16px;line-height:1.7}
+</style>
+</head>
+<body>
+<div class="shell">
+  <div>
+    <div class="wordmark">Listed.</div>
+    <div class="headline">Build<br>the habit.<br><em>Get listed.</em></div>
+    <div class="desc">50 real homeowners in your market, every morning. One tap to start.</div>
+  </div>
+  <div class="bottom">
+    <div id="signup-form">
+      <div class="field"><label>Full name</label><input id="s-name" type="text" placeholder="Alex Johnson" autocomplete="name"></div>
+      <div class="field"><label>Email</label><input id="s-email" type="email" placeholder="alex@email.com" autocomplete="email"></div>
+      <div class="field"><label>Password</label><input id="s-pass" type="password" placeholder="At least 6 characters" autocomplete="new-password"></div>
+      <button class="btn" id="signup-btn" onclick="signUp()">Create account →</button>
+      <div class="err" id="signup-err"></div>
+      <div class="toggle">Already have an account? <span onclick="showLogin()">Sign in</span></div>
+    </div>
+    <div id="login-form" style="display:none">
+      <div class="field"><label>Email</label><input id="l-email" type="email" placeholder="alex@email.com" autocomplete="email"></div>
+      <div class="field"><label>Password</label><input id="l-pass" type="password" placeholder="Your password" autocomplete="current-password"></div>
+      <button class="btn" id="login-btn" onclick="signIn()">Sign in →</button>
+      <div class="err" id="login-err"></div>
+      <div class="toggle">New here? <span onclick="showSignup()">Create account</span></div>
+    </div>
+    <div class="fine">75 days. 50 calls. 1 listing.<br>Or your money back.</div>
+  </div>
+</div>
+<script>
+// Check if already logged in
+setTimeout(async () => {
+  try {
+    const { data: { session } } = await db.auth.getSession();
+    if (session) window.location.href = 'today.html';
+  } catch(e) {}
+}, 200);
+
+function showLogin() {
+  document.getElementById('signup-form').style.display = 'none';
+  document.getElementById('login-form').style.display = 'block';
+}
+function showSignup() {
+  document.getElementById('login-form').style.display = 'none';
+  document.getElementById('signup-form').style.display = 'block';
+}
+
+async function signUp() {
+  const name = document.getElementById('s-name').value.trim();
+  const email = document.getElementById('s-email').value.trim();
+  const pass = document.getElementById('s-pass').value;
+  const errEl = document.getElementById('signup-err');
+  const btn = document.getElementById('signup-btn');
+
+  if (!name || !email || !pass) { errEl.textContent = 'Please fill in all fields.'; errEl.classList.add('show'); return; }
+  if (pass.length < 6) { errEl.textContent = 'Password must be at least 6 characters.'; errEl.classList.add('show'); return; }
+
+  btn.textContent = 'Creating account...'; btn.disabled = true; errEl.classList.remove('show');
+
+  const { data, error } = await db.auth.signUp({ email, password: pass, options: { data: { full_name: name } } });
+
+  if (error) {
+    errEl.textContent = error.message; errEl.classList.add('show');
+    btn.textContent = 'Create account →'; btn.disabled = false; return;
+  }
+
+  if (data.user) {
+    // Create user profile
+    await db.from('users').insert({ id: data.user.id, name, zip: '', city: '' });
+    window.location.href = 'onboarding.html';
+  }
+}
+
+async function signIn() {
+  const email = document.getElementById('l-email').value.trim();
+  const pass = document.getElementById('l-pass').value;
+  const errEl = document.getElementById('login-err');
+  const btn = document.getElementById('login-btn');
+
+  if (!email || !pass) { errEl.textContent = 'Please enter email and password.'; errEl.classList.add('show'); return; }
+
+  btn.textContent = 'Signing in...'; btn.disabled = true; errEl.classList.remove('show');
+
+  const { data, error } = await db.auth.signInWithPassword({ email, password: pass });
+
+  if (error) {
+    errEl.textContent = error.message; errEl.classList.add('show');
+    btn.textContent = 'Sign in →'; btn.disabled = false; return;
+  }
+
+  window.location.href = 'today.html';
+}
+
+// Enter key support
+document.addEventListener('keydown', e => {
+  if (e.key === 'Enter') {
+    if (document.getElementById('signup-form').style.display !== 'none') signUp();
+    else signIn();
+  }
+});
+</script>
+</body>
+</html>

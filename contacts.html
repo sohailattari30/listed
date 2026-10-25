@@ -21,14 +21,28 @@
 .av.hot{background:var(--accent-light);color:var(--accent)}
 .av.vm{background:var(--amber-light);color:var(--amber)}
 .av.def{background:#EBEBEB;color:var(--muted)}
+.av.met{background:#E8F5EC;color:var(--green)}
+.tag-lt{background:#EBEBEB;color:var(--muted)}
+.tag-met{background:#E8F5EC;color:var(--green)}
 .c-info{flex:1;min-width:0}
 .c-name{font-size:15px;font-weight:700;margin-bottom:2px}
 .c-addr{font-size:12px;font-weight:500;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-bottom:2px}
-.c-phone{font-size:12px;font-weight:500;color:var(--muted);margin-bottom:6px}
-.del{position:absolute;top:16px;right:0;background:none;border:none;cursor:pointer;font-size:18px;color:var(--muted);opacity:.4;padding:4px}
-.del:hover{opacity:.8}
-.empty{font-size:14px;font-weight:500;color:var(--muted);padding:24px 0}
-.loading-msg{font-size:14px;color:var(--muted);padding:24px 28px}
+.c-phone{font-size:12px;font-weight:600;color:var(--muted);margin-bottom:6px;display:inline-block;text-decoration:none}
+a.c-phone{color:var(--accent)}
+.del{position:absolute;top:12px;right:-6px;background:none;border:none;cursor:pointer;color:var(--muted);opacity:.45;padding:8px;border-radius:10px;font-family:var(--body);font-size:11px;font-weight:700;letter-spacing:.3px;transition:opacity .15s,background .15s,color .15s}
+.del svg{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;display:block}
+.del:hover{opacity:.9;background:var(--off)}
+.del.confirm{opacity:1;background:#FDECEC;color:var(--red);padding:8px 12px}
+.search{width:100%;padding:13px 16px;border:1.5px solid var(--line);border-radius:14px;font-size:14px;font-family:var(--body);font-weight:500;background:var(--off);color:var(--black);outline:none;margin-top:12px;transition:border-color .15s,background .15s;-webkit-appearance:none}
+.search:focus{border-color:var(--black);background:var(--white)}
+.search.hidden{display:none}
+.empty{display:flex;flex-direction:column;align-items:center;text-align:center;padding:40px 12px;gap:8px}
+.empty svg{width:36px;height:36px;stroke:var(--muted);opacity:.5;fill:none;stroke-width:1.4;stroke-linecap:round;stroke-linejoin:round;margin-bottom:6px}
+.empty-title{font-size:15px;font-weight:700}
+.empty-sub{font-size:13px;font-weight:500;color:var(--muted);line-height:1.55}
+.loading-msg{display:flex;justify-content:center;padding:32px 0}
+.field-err{font-size:12px;color:var(--red);font-weight:600;margin-top:6px;display:none}
+.field-err.show{display:block}
 </style>
 </head>
 <body>
@@ -37,14 +51,17 @@
     <div class="title">Your<br><em>network.</em></div>
     <div class="sub" id="sub-count">Loading...</div>
   </div>
-  <div class="cta"><button class="btn" onclick="openModal()">+ Add contact</button></div>
-  <div class="list" id="list"><div class="loading-msg">Loading contacts...</div></div>
+  <div class="cta">
+    <button class="btn" onclick="openModal()">+ Add contact</button>
+    <input class="search hidden" id="search" type="search" placeholder="Search name, address or phone" oninput="render()" autocomplete="off">
+  </div>
+  <div class="list" id="list"><div class="loading-msg"><div class="spinner"></div></div></div>
 </div>
 
 <div class="backdrop hidden" id="modal">
   <div class="modal">
     <div class="modal-title">Add contact</div>
-    <div class="field"><label>Name</label><input id="m-name" type="text" placeholder="John Smith"></div>
+    <div class="field"><label>Name</label><input id="m-name" type="text" placeholder="John Smith"><div class="field-err" id="m-err">Name is required</div></div>
     <div class="field"><label>Address</label><input id="m-addr" type="text" placeholder="123 Main St"></div>
     <div class="field"><label>Phone</label><input id="m-phone" type="tel" placeholder="(510) 000-0000"></div>
     <div class="field"><label>Status</label>
@@ -57,7 +74,7 @@
     </div>
     <div class="modal-actions">
       <button class="modal-cancel" onclick="closeModal()">Cancel</button>
-      <button class="modal-save" onclick="saveContact()">Save</button>
+      <button class="modal-save" id="m-save" onclick="saveContact()">Save</button>
     </div>
   </div>
 </div>
@@ -72,6 +89,9 @@
 <script>
 let USER=null,CONTACTS=[];
 function initials(n){return(n||'').split(/\s+/).slice(0,2).map(w=>w[0]?.toUpperCase()||'').join('');}
+function esc(v){return String(v??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));}
+const STATUS_STYLE={'Hot lead':['hot','tag-hot'],'Callback':['vm','tag-vm'],'Long-term':['def','tag-lt'],'Met in person':['met','tag-met']};
+let PENDING_DELETE=null;
 
 async function init(){
   const{data:{session}}=await db.auth.getSession();
@@ -88,39 +108,67 @@ async function loadContacts(){
 
 function render(){
   document.getElementById('sub-count').textContent=`${CONTACTS.length} contact${CONTACTS.length!==1?'s':''}`;
+  const search=document.getElementById('search');
+  search.classList.toggle('hidden',CONTACTS.length<5);
   const list=document.getElementById('list');
-  if(!CONTACTS.length){list.innerHTML='<div class="empty">No contacts yet. Add people you connect with.</div>';return;}
-  list.innerHTML=CONTACTS.map((c,i)=>`
+  if(!CONTACTS.length){list.innerHTML=`<div class="empty"><svg viewBox="0 0 24 24"><circle cx="9" cy="7" r="4"/><path d="M3 21v-2a4 4 0 014-4h4a4 4 0 014 4v2M16 3.13a4 4 0 010 7.75"/><path d="M21 21v-2a4 4 0 00-3-3.87"/></svg><div class="empty-title">No contacts yet</div><div class="empty-sub">Save hot leads and people you meet<br>so you never lose a follow-up.</div></div>`;return;}
+  const q=search.value.trim().toLowerCase();
+  const shown=q?CONTACTS.filter(c=>[c.name,c.address,c.phone].some(v=>(v||'').toLowerCase().includes(q))):CONTACTS;
+  if(!shown.length){list.innerHTML=`<div class="empty"><div class="empty-title">No matches</div><div class="empty-sub">Nothing found for “${esc(q)}”.</div></div>`;return;}
+  list.innerHTML=shown.map(c=>{
+    const[av,tag]=STATUS_STYLE[c.status]||['def','tag-lt'];
+    const tel=(c.phone||'').replace(/[^\d+]/g,'');
+    const confirming=PENDING_DELETE===c.id;
+    return `
     <div class="c-row">
-      <div class="av ${c.status==='Hot lead'?'hot':c.status==='Callback'?'vm':'def'}">${initials(c.name)}</div>
+      <div class="av ${av}">${esc(initials(c.name))}</div>
       <div class="c-info">
-        <div class="c-name">${c.name}</div>
-        <div class="c-addr">${c.address||'—'}</div>
-        <div class="c-phone">${c.phone||'—'}</div>
-        <span class="tag ${c.status==='Hot lead'?'tag-hot':'tag-vm'}">${c.status}</span>
+        <div class="c-name">${esc(c.name)}</div>
+        <div class="c-addr">${esc(c.address||'—')}</div>
+        ${tel?`<a class="c-phone" href="tel:${esc(tel)}">${esc(c.phone)}</a>`:'<div class="c-phone">—</div>'}
+        <div><span class="tag ${tag}">${esc(c.status)}</span></div>
       </div>
-      <button class="del" onclick="deleteContact('${c.id}')">×</button>
-    </div>`).join('');
+      <button class="del${confirming?' confirm':''}" onclick="deleteContact('${esc(c.id)}')" aria-label="Delete ${esc(c.name)}">${confirming?'Delete?':'<svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>'}</button>
+    </div>`;}).join('');
 }
 
+let deleteTimer=null;
 async function deleteContact(id){
+  // First tap arms the button, second tap deletes
+  if(PENDING_DELETE!==id){
+    PENDING_DELETE=id;render();
+    clearTimeout(deleteTimer);
+    deleteTimer=setTimeout(()=>{PENDING_DELETE=null;render();},3000);
+    return;
+  }
+  clearTimeout(deleteTimer);PENDING_DELETE=null;
   await db.from('contacts').delete().eq('id',id);
   await loadContacts();
 }
 
 function openModal(){document.getElementById('modal').classList.remove('hidden');document.getElementById('m-name').focus();}
-function closeModal(){document.getElementById('modal').classList.add('hidden');}
+function closeModal(){document.getElementById('modal').classList.add('hidden');document.getElementById('m-err').classList.remove('show');}
 
 async function saveContact(){
   const name=document.getElementById('m-name').value.trim();
-  if(!name)return;
-  await db.from('contacts').insert({user_id:USER.id,name,address:document.getElementById('m-addr').value.trim(),phone:document.getElementById('m-phone').value.trim(),status:document.getElementById('m-status').value});
+  const err=document.getElementById('m-err');
+  if(!name){err.textContent='Name is required';err.classList.add('show');document.getElementById('m-name').focus();return;}
+  const btn=document.getElementById('m-save');
+  btn.disabled=true;btn.textContent='Saving...';
+  const{error}=await db.from('contacts').insert({user_id:USER.id,name,address:document.getElementById('m-addr').value.trim(),phone:document.getElementById('m-phone').value.trim(),status:document.getElementById('m-status').value});
+  btn.disabled=false;btn.textContent='Save';
+  if(error){err.textContent='Could not save: '+error.message;err.classList.add('show');return;}
   closeModal();
   ['m-name','m-addr','m-phone'].forEach(id=>document.getElementById(id).value='');
   await loadContacts();
 }
 
 document.getElementById('modal').addEventListener('click',e=>{if(e.target===document.getElementById('modal'))closeModal();});
+document.addEventListener('keydown',e=>{
+  if(document.getElementById('modal').classList.contains('hidden'))return;
+  if(e.key==='Escape')closeModal();
+  else if(e.key==='Enter'&&e.target.tagName==='INPUT')saveContact();
+});
 init();
 </script>
 </body>

@@ -42,9 +42,13 @@
 .arr{opacity:.4;font-size:16px}
 .sell{background:var(--accent-light);color:var(--accent)}
 .vm{background:var(--off);color:var(--black)}
-.no{background:transparent;color:var(--muted);border:2px solid var(--line)}
+.no{background:transparent;color:var(--muted);box-shadow:inset 0 0 0 2px var(--line)}
+.obtn:disabled{opacity:.5;cursor:default;transform:none}
+.kbd{display:inline-flex;align-items:center;justify-content:center;min-width:20px;height:20px;padding:0 5px;margin-right:10px;border-radius:6px;background:rgba(10,10,10,.06);font-size:11px;font-weight:700;opacity:.7}
+.obtn-l{display:flex;align-items:center}
+@media (hover:none){.kbd{display:none}}
 .skip{background:none;border:none;width:100%;text-align:center;padding:16px 0;font-size:13px;font-weight:600;color:var(--muted);cursor:pointer;text-decoration:underline;text-underline-offset:4px;font-family:var(--body)}
-.loading-screen{flex:1;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:600;color:var(--muted)}
+.loading-screen{flex:1;display:flex;flex-direction:column;gap:16px;align-items:center;justify-content:center;font-size:15px;font-weight:600;color:var(--muted)}
 /* No data */
 .no-data{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:48px 32px;text-align:center}
 .no-data-title{font-family:var(--display);font-size:40px;font-weight:600;line-height:1.1;margin-bottom:12px}
@@ -77,7 +81,7 @@
 
   <!-- LOADING -->
   <div id="v-loading" style="display:flex;flex-direction:column;flex:1">
-    <div class="loading-screen">Loading your territory...</div>
+    <div class="loading-screen"><div class="spinner"></div>Loading your territory...</div>
   </div>
 
   <!-- NO DATA -->
@@ -139,9 +143,9 @@
         </div>
       </a>
       <div class="outcomes">
-        <button class="obtn sell" onclick="logCall('sell')">Wants to sell <span class="arr">→</span></button>
-        <button class="obtn vm" onclick="logCall('vm')">Voicemail <span class="arr">→</span></button>
-        <button class="obtn no" onclick="logCall('no')">Not interested <span class="arr">→</span></button>
+        <button class="obtn sell" onclick="logCall('sell')"><span class="obtn-l"><span class="kbd">1</span>Wants to sell</span> <span class="arr">→</span></button>
+        <button class="obtn vm" onclick="logCall('vm')"><span class="obtn-l"><span class="kbd">2</span>Voicemail</span> <span class="arr">→</span></button>
+        <button class="obtn no" onclick="logCall('no')"><span class="obtn-l"><span class="kbd">3</span>Not interested</span> <span class="arr">→</span></button>
       </div>
       <button class="skip" onclick="logCall('skip')">Skip this number</button>
     </div>
@@ -377,9 +381,25 @@ function renderAddr() {
   else low.innerHTML = '';
 }
 
+let LOGGING = false;
+function setOutcomesDisabled(v) {
+  document.querySelectorAll('.obtn, .skip').forEach(b => b.disabled = v);
+}
+
 async function logCall(outcome) {
+  // Guard against double taps logging the same homeowner twice
+  if (LOGGING) return;
+  LOGGING = true;
+  setOutcomesDisabled(true);
   const a = OWNERS[sessionCur];
-  await db.from('calls').insert({ user_id: USER.id, homeowner_id: a.id, outcome });
+  const { error } = await db.from('calls').insert({ user_id: USER.id, homeowner_id: a.id, outcome });
+  if (error) {
+    console.error('Call log failed:', error);
+    LOGGING = false;
+    setOutcomesDisabled(false);
+    alert('Could not save that call. Check your connection and try again.');
+    return;
+  }
   if (!CALL_HISTORY[a.id]) CALL_HISTORY[a.id] = { count: 0, lastOutcome: null };
   CALL_HISTORY[a.id].count++;
   if (outcome !== 'skip') CALL_HISTORY[a.id].lastOutcome = outcome;
@@ -388,11 +408,25 @@ async function logCall(outcome) {
   else if (outcome === 'no') sessionNos++;
   sessionCur++;
   saveSessionState();
-  if (sessionCur >= 50) { showDone(); return; }
+  if (sessionCur >= 50) { LOGGING = false; setOutcomesDisabled(false); showDone(); return; }
   const body = document.getElementById('call-body');
   body.style.cssText = 'transition:opacity .16s ease,transform .16s ease;opacity:0;transform:translateX(-12px)';
-  setTimeout(() => { renderAddr(); body.style.cssText = 'transition:none;opacity:0;transform:translateX(12px)'; void body.offsetWidth; body.style.cssText = 'transition:opacity .2s ease,transform .2s ease;opacity:1;transform:translateX(0)'; }, 175);
+  setTimeout(() => {
+    renderAddr();
+    body.style.cssText = 'transition:none;opacity:0;transform:translateX(12px)'; void body.offsetWidth; body.style.cssText = 'transition:opacity .2s ease,transform .2s ease;opacity:1;transform:translateX(0)';
+    LOGGING = false;
+    setOutcomesDisabled(false);
+  }, 175);
 }
+
+// Keyboard shortcuts for desktop dialing: 1/2/3 outcomes, S skip
+document.addEventListener('keydown', e => {
+  if (document.getElementById('v-call').style.display === 'none') return;
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  const map = { '1': 'sell', '2': 'vm', '3': 'no', 's': 'skip' };
+  const outcome = map[e.key.toLowerCase()];
+  if (outcome) { e.preventDefault(); logCall(outcome); }
+});
 
 async function showDone() {
   await db.from('sessions').insert({ user_id: USER.id, calls_made: sessionCur, hot_leads: sessionSells, session_date: new Date().toISOString().split('T')[0] });

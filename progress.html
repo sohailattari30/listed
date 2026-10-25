@@ -13,14 +13,20 @@
 .title{font-family:var(--display);font-size:56px;line-height:.92;font-weight:600;letter-spacing:-1px;margin-bottom:4px}
 .title em{font-style:italic;color:var(--muted)}
 .sub{font-size:13px;font-weight:600;color:var(--muted);margin-bottom:10px}
-.zip-tag{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;background:var(--off);border:1px solid var(--border-mid);border-radius:20px;padding:5px 12px;color:var(--muted);margin-bottom:28px}
+.zip-tag{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;background:var(--off);border:1px solid var(--line);border-radius:20px;padding:5px 12px;color:var(--muted);margin-bottom:28px}
 .zip-dot{width:6px;height:6px;border-radius:50%;background:#16A34A}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;padding:0 28px 28px}
+.stat{background:var(--off);border-radius:18px;padding:16px 14px}
+.stat-n{font-family:var(--display);font-size:38px;font-weight:600;line-height:1}
+.stat-n.hot{color:var(--accent)}
+.stat-l{font-size:10px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:var(--muted);margin-top:6px}
 .ms-list{padding:0 28px}
-.ms{display:flex;gap:16px;align-items:flex-start;padding:20px 0;border-bottom:1px solid var(--line)}
-.ms:last-child{border-bottom:none}
+.ms{display:flex;gap:16px;align-items:flex-start;padding:16px 0;position:relative}
+.ms:not(:last-child)::after{content:'';position:absolute;left:10px;top:42px;bottom:-4px;width:2px;border-radius:2px;background:var(--line)}
+.ms.done-ms:not(:last-child)::after{background:var(--black)}
 .ms-node{width:22px;height:22px;border-radius:50%;flex-shrink:0;margin-top:2px;display:flex;align-items:center;justify-content:center}
 .ms-node.done{background:var(--black)}
-.ms-node.here{background:transparent;border:2px solid var(--black)}
+.ms-node.here{background:var(--white);border:2px solid var(--black);box-shadow:0 0 0 5px var(--off)}
 .ms-node.wait{background:var(--line)}
 .ms-check{width:8px;height:8px;border-radius:50%;background:white}
 .ms-dot{width:7px;height:7px;border-radius:50%;background:var(--black)}
@@ -54,7 +60,12 @@
     <div class="sub">Agents who call daily list within 60 days.</div>
     <div class="zip-tag"><div class="zip-dot"></div><span id="zip-label">Your market</span></div>
   </div>
-  <div class="ms-list" id="ms-list"><div style="padding:20px 0;font-size:14px;color:var(--muted);font-weight:500">Loading...</div></div>
+  <div class="stats" id="stats" style="display:none">
+    <div class="stat"><div class="stat-n" id="st-calls">0</div><div class="stat-l">Calls</div></div>
+    <div class="stat"><div class="stat-n hot" id="st-hot">0</div><div class="stat-l">Hot leads</div></div>
+    <div class="stat"><div class="stat-n" id="st-sessions">0</div><div class="stat-l">Sessions</div></div>
+  </div>
+  <div class="ms-list" id="ms-list"><div style="padding:20px 0;display:flex;justify-content:center"><div class="spinner"></div></div></div>
   <div class="footer">
     <a class="btn" href="today.html">Back to today</a>
     <button class="change-zip-btn" onclick="openZipModal()">Change zip code / city</button>
@@ -132,6 +143,7 @@ async function saveZip() {
 async function signOut() { await db.auth.signOut(); window.location.href = 'index.html'; }
 
 document.getElementById('new-zip').addEventListener('keydown', e => { if (e.key === 'Enter') saveZip(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && document.getElementById('zip-modal').classList.contains('open')) closeZipModal(); });
 
 async function init() {
   const { data: { session } } = await db.auth.getSession();
@@ -154,8 +166,13 @@ async function init() {
     const n = type === 'done' ? `<div class="ms-node done"><div class="ms-check"></div></div>`
       : type === 'here' ? `<div class="ms-node here"><div class="ms-dot"></div></div>`
       : `<div class="ms-node wait"></div>`;
-    return `<div class="ms">${n}<div><div class="ms-title${dim ? ' dim' : ''}">${title}</div><div class="ms-sub">${sub}</div></div></div>`;
+    return `<div class="ms${type === 'done' ? ' done-ms' : ''}">${n}<div><div class="ms-title${dim ? ' dim' : ''}">${title}</div><div class="ms-sub">${sub}</div></div></div>`;
   }
+
+  document.getElementById('st-calls').textContent = totalCalls;
+  document.getElementById('st-hot').textContent = hotLeads;
+  document.getElementById('st-sessions').textContent = totalSessions;
+  document.getElementById('stats').style.display = 'grid';
 
   let html = '';
   html += ms('done', `Welcome, ${(profile.name || 'Agent').split(' ')[0]}`, 'Account active');

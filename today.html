@@ -22,8 +22,10 @@
 @keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.6;transform:scale(.85)}}
 .forecast-text{font-size:14px;font-weight:700}
 .forecast-text span{color:#4ADE80}
+.forecast-chev{width:14px;height:14px;stroke:rgba(255,255,255,.6);fill:none;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round;transition:transform .2s;flex-shrink:0}
+.forecast-wrap.open .forecast-chev{transform:rotate(180deg)}
 .forecast-expanded{background:var(--off);border-radius:20px;padding:20px;margin-top:12px;display:none}
-.forecast-expanded.open{display:block}
+.forecast-expanded.open{display:block;animation:fadeUp .2s cubic-bezier(.4,0,.2,1)}
 .forecast-row{display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--line);font-size:14px}
 .forecast-row:last-child{border-bottom:none}
 .frl{font-weight:600;color:var(--muted)}
@@ -34,7 +36,7 @@
 .signout{background:none;border:none;font-size:12px;color:var(--muted);cursor:pointer;margin-top:12px;text-decoration:underline;text-underline-offset:3px;font-family:var(--body)}
 
 /* COACH CARD */
-.coach-card{margin:24px 28px 0;background:var(--off);border-radius:20px;padding:18px 20px}
+.coach-card{margin:28px 0 0;background:var(--off);border-radius:20px;padding:18px 20px}
 .coach-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
 .coach-label{font-size:11px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:var(--muted)}
 .coach-count{font-size:13px;font-weight:700;color:var(--black)}
@@ -52,10 +54,16 @@
     <div class="date" id="date-el"></div>
     <div class="headline">Your<br>job<br><em>today.</em></div>
     <div class="market" id="market-el">Loading your territory...</div>
-    <div class="forecast-wrap" onclick="toggleForecast()">
+    <div class="coach-card" id="coach-card" style="display:none">
+      <div class="coach-top"><div class="coach-label">Today's calls</div><div class="coach-count" id="coach-count">0 / 50</div></div>
+      <div class="coach-bar-track"><div class="coach-bar-fill" id="coach-bar" style="width:0%"></div></div>
+      <div class="coach-msg" id="coach-msg"></div>
+    </div>
+    <div class="forecast-wrap" id="forecast-wrap" onclick="toggleForecast()" role="button" tabindex="0" aria-expanded="false" aria-controls="forecast-expanded">
       <div class="forecast-pill">
         <div class="forecast-dot"></div>
         <div class="forecast-text" id="forecast-pill-text">First listing forecast: calculating...</div>
+        <svg class="forecast-chev" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>
       </div>
       <div class="forecast-expanded" id="forecast-expanded">
         <div class="forecast-row"><div class="frl">Warm leads so far</div><div class="frv" id="fc-leads">0</div></div>
@@ -100,10 +108,30 @@ async function init(){
   document.getElementById('market-el').textContent=`50 long-term owners · ${profile.city||profile.zip}`;
 
   // Load stats for forecast
-  const{data:calls}=await db.from('calls').select('outcome').eq('user_id',USER.id);
+  const{data:calls}=await db.from('calls').select('*').eq('user_id',USER.id);
   const totalCalls=calls?.length||0;
   const hotLeads=calls?.filter(c=>c.outcome==='sell').length||0;
   buildForecast(totalCalls,hotLeads);
+  const todayStr=new Date().toDateString();
+  const todays=(calls||[]).filter(c=>c.created_at&&new Date(c.created_at).toDateString()===todayStr);
+  buildCoach(todays.length,todays.filter(c=>c.outcome==='sell').length);
+}
+
+function buildCoach(done,hot){
+  const GOAL=50;
+  const pct=Math.min(100,Math.round(done/GOAL*100));
+  document.getElementById('coach-count').textContent=`${done} / ${GOAL}`;
+  const bar=document.getElementById('coach-bar');
+  bar.classList.toggle('done',done>=GOAL);
+  requestAnimationFrame(()=>bar.style.width=pct+'%');
+  const hotTxt=hot?` <span>${hot} hot lead${hot!==1?'s':''}</span> so far.`:'';
+  const msg=done===0?'Nothing logged yet. First call is the hardest. Make it now.'
+    :done<GOAL/2?`Good start.${hotTxt} Keep the momentum.`
+    :done<GOAL?`Over halfway. ${GOAL-done} to go.${hotTxt}`
+    :`Daily goal hit.${hotTxt} Anything more is bonus.`;
+  document.getElementById('coach-msg').innerHTML=msg;
+  document.getElementById('coach-card').style.display='block';
+  if(done>0&&done<GOAL)document.querySelector('.bottom .btn').textContent='Continue calling →';
 }
 
 function buildForecast(totalCalls,hotLeads){
@@ -129,7 +157,11 @@ let expanded=false;
 function toggleForecast(){
   expanded=!expanded;
   document.getElementById('forecast-expanded').classList.toggle('open',expanded);
+  const wrap=document.getElementById('forecast-wrap');
+  wrap.classList.toggle('open',expanded);
+  wrap.setAttribute('aria-expanded',expanded);
 }
+document.getElementById('forecast-wrap').addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();toggleForecast();}});
 
 async function signOut(){
   await db.auth.signOut();

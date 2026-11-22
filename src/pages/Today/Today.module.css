@@ -1,0 +1,24 @@
+.page{justify-content:space-between;min-height:100dvh}
+.top{flex:1;display:flex;flex-direction:column;justify-content:center;padding:60px 28px 0}
+.wordmark{font-size:13px;font-weight:700;letter-spacing:4px;text-transform:uppercase;color:var(--muted);margin-bottom:52px}
+.date{font-size:12px;font-weight:600;letter-spacing:2px;text-transform:uppercase;color:var(--muted);margin-bottom:18px}
+.headline{font-family:var(--display);font-size:86px;line-height:.88;font-weight:600;letter-spacing:-2px;color:var(--black)}
+.headline em{font-style:italic;font-weight:400;color:var(--muted)}
+.market{font-size:14px;font-weight:600;color:var(--muted);margin-top:24px;letter-spacing:.2px}
+.forecastWrap{margin-top:28px;cursor:pointer;background:none;border:none;padding:0;text-align:left;font-family:var(--body);display:block;width:100%}
+.pill{display:inline-flex;align-items:center;gap:10px;background:var(--black);color:white;padding:12px 18px;border-radius:50px;transition:opacity .15s}
+.forecastWrap:hover .pill{opacity:.88}
+.dot{width:8px;height:8px;border-radius:50%;background:#4ADE80;flex-shrink:0;box-shadow:0 0 8px rgba(74,222,128,.8);animation:pulse 2s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.6;transform:scale(.85)}}
+.pillText{font-size:14px;font-weight:700}
+.pillText span{color:#4ADE80}
+.expanded{background:var(--off);border-radius:20px;padding:20px;margin-top:12px;display:block;color:var(--black)}
+.row{display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--line);font-size:14px}
+.row:last-of-type{border-bottom:none}
+.rowLabel{font-weight:600;color:var(--muted)}
+.rowValue{font-weight:700;color:var(--black)}
+.green{color:#16A34A}
+.note{font-size:12px;font-weight:600;color:var(--muted);margin-top:12px}
+.bottom{padding:28px 28px 44px;display:flex;flex-direction:column;align-items:center}
+.greeting{font-size:15px;font-weight:600;color:var(--muted);margin-bottom:16px;text-align:center}
+.signout{background:none;border:none;font-size:12px;color:var(--muted);cursor:pointer;margin-top:12px;text-decoration:underline;text-underline-offset:3px;font-family:var(--body)}

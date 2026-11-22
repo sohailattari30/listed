@@ -1,0 +1,15 @@
+.page{max-width:430px;margin:0 auto;min-height:100dvh;background:var(--white);display:flex;flex-direction:column;justify-content:space-between;padding:60px 28px 52px}
+.wordmark{font-size:13px;font-weight:700;letter-spacing:4px;text-transform:uppercase;color:var(--muted);margin-bottom:52px}
+.headline{font-family:var(--display);font-size:62px;line-height:.92;font-weight:600;letter-spacing:-1.5px;margin-bottom:16px}
+.headline em{font-style:italic;font-weight:400;color:var(--muted)}
+.desc{font-size:15px;font-weight:500;color:var(--muted);line-height:1.65;margin-bottom:40px}
+.field label{font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);display:block;margin-bottom:10px}
+.field input{width:100%;background:none;border:none;border-bottom:2px solid var(--line);border-radius:0;-webkit-appearance:none;padding:10px 0;font-size:22px;font-weight:600;font-family:var(--body);color:var(--black);outline:none;transition:border-color .2s}
+.field input:focus{border-color:var(--black)}
+.field input::placeholder{color:rgba(10,10,10,.18);font-weight:400}
+.err{font-size:13px;color:#B91C1C;margin-top:8px;font-weight:600}
+.bottom{margin-top:auto;padding-top:40px}
+.fine{font-size:12px;font-weight:500;color:var(--muted);text-align:center;margin-top:14px}
+.btn{width:100%;padding:20px;background:var(--black);color:var(--white);border:none;border-radius:20px;font-size:17px;font-weight:700;cursor:pointer;font-family:var(--body);letter-spacing:.5px;transition:opacity .15s}
+.btn:hover{opacity:.88}
+.btn:disabled{opacity:.4;cursor:not-allowed}

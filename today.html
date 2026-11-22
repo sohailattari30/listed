@@ -7,7 +7,17 @@
 <link rel="stylesheet" href="style.css">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="supabase-client.js"></script>
+<script src="ai-client.js"></script>
 <style>
+.coach-btn{width:100%;padding:12px 16px;border-radius:14px;border:none;background:var(--black);color:#fff;font-size:14px;font-weight:700;cursor:pointer;font-family:var(--body)}
+.coach-btn:disabled{opacity:.5;cursor:default}
+.coach-head{font-size:15px;font-weight:700;color:var(--black);line-height:1.4;margin-bottom:8px}
+.coach-line{font-size:13px;font-weight:600;color:var(--black);line-height:1.55;margin-bottom:6px}
+.coach-today{font-size:13px;font-weight:700;color:var(--black);line-height:1.55;margin-top:10px;padding-top:10px;border-top:1px solid var(--line)}
+.coach-steps{margin-top:12px;padding-top:10px;border-top:1px solid var(--line)}
+.coach-steps-label{font-size:10px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:var(--muted);margin-bottom:6px}
+.coach-step{font-size:12px;font-weight:600;color:var(--muted);line-height:1.5}
+.coach-err{font-size:12px;font-weight:600;color:#B91C1C;margin-bottom:10px}
 .shell{justify-content:space-between;min-height:100dvh}
 .top{flex:1;display:flex;flex-direction:column;justify-content:center;padding:60px 28px 0}
 .wordmark{font-size:13px;font-weight:700;letter-spacing:4px;text-transform:uppercase;color:var(--muted);margin-bottom:52px}
@@ -66,6 +76,10 @@
       </div>
     </div>
   </div>
+  <div class="coach-card" id="coach-card">
+    <div class="coach-top"><div class="coach-label">AI coach</div></div>
+    <div id="coach-body"></div>
+  </div>
   <div class="bottom">
     <div class="greeting" id="greeting-el"></div>
     <a class="btn" href="dial.html">Start calling →</a>
@@ -104,6 +118,43 @@ async function init(){
   const totalCalls=calls?.length||0;
   const hotLeads=calls?.filter(c=>c.outcome==='sell').length||0;
   buildForecast(totalCalls,hotLeads);
+  renderCoach();
+}
+
+const COACH_KEY='listed_coach_'+new Date().toDateString();
+
+function coachHtml(r){
+  const lines=(r.text||'').split('\n').map(l=>l.trim()).filter(Boolean);
+  let html='';
+  lines.forEach((l,i)=>{
+    if(i===0) html+='<div class="coach-head">'+escHtml(l)+'</div>';
+    else if(/^today:/i.test(l)) html+='<div class="coach-today">'+escHtml(l)+'</div>';
+    else html+='<div class="coach-line">'+escHtml(l.replace(/^-\s*/,''))+'</div>';
+  });
+  if(r.steps&&r.steps.length){
+    html+='<div class="coach-steps"><div class="coach-steps-label">What the coach checked</div>'+
+      r.steps.map(s=>'<div class="coach-step">'+escHtml(s.summary)+'</div>').join('')+'</div>';
+  }
+  return html;
+}
+
+function renderCoach(errMsg){
+  const body=document.getElementById('coach-body');
+  let cached=null;
+  try{cached=JSON.parse(sessionStorage.getItem(COACH_KEY)||'null');}catch(e){}
+  if(cached){body.innerHTML=coachHtml(cached);return;}
+  body.innerHTML=(errMsg?'<div class="coach-err">'+escHtml(errMsg)+'</div>':'')+
+    '<button class="coach-btn" id="coach-btn" onclick="runCoach()">'+(errMsg?'Try again':'Analyze my calls')+'</button>';
+}
+
+async function runCoach(){
+  const btn=document.getElementById('coach-btn');
+  btn.disabled=true;btn.textContent='Coach is reading your numbers...';
+  try{
+    const r=await callAI({mode:'coach'});
+    try{sessionStorage.setItem(COACH_KEY,JSON.stringify(r));}catch(e){}
+    document.getElementById('coach-body').innerHTML=coachHtml(r);
+  }catch(e){renderCoach(e.message);}
 }
 
 function buildForecast(totalCalls,hotLeads){

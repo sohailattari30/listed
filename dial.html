@@ -7,7 +7,19 @@
 <link rel="stylesheet" href="style.css">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="supabase-client.js"></script>
+<script src="ai-client.js"></script>
 <style>
+.brief-btn{width:100%;padding:13px 18px;border-radius:16px;border:none;background:var(--accent-light);color:var(--accent);font-size:14px;font-weight:700;cursor:pointer;font-family:var(--body);display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+.brief-btn:disabled{opacity:.6;cursor:default}
+.brief-card{background:var(--off);border-radius:18px;padding:18px 20px;margin-bottom:14px}
+.brief-label{font-size:11px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:var(--muted);margin:14px 0 6px}
+.brief-label:first-child{margin-top:0}
+.brief-open{font-family:var(--display);font-size:20px;font-weight:600;line-height:1.3;color:var(--black)}
+.brief-text{font-size:13px;font-weight:600;color:var(--black);line-height:1.5}
+.brief-obj{font-size:13px;line-height:1.5;margin-bottom:8px}
+.brief-obj b{font-weight:700}
+.brief-obj span{color:var(--muted);font-weight:600}
+.brief-err{font-size:12px;font-weight:600;color:#B91C1C;margin-bottom:14px}
 .shell{min-height:100dvh}
 .dial-top{padding:52px 28px 16px}
 .back-btn{display:flex;align-items:center;gap:6px;background:none;border:none;font-size:13px;font-weight:700;color:var(--muted);cursor:pointer;font-family:var(--body);padding:0;margin-bottom:20px;letter-spacing:.3px}
@@ -127,6 +139,7 @@
         <div class="address-meta" id="c-meta"></div>
         <div id="last-outcome-wrap"></div>
       </div>
+      <div id="brief-slot"></div>
       <a id="tps-link" href="#" target="_blank" style="text-decoration:none;display:block;margin-bottom:24px">
         <div class="phone-block" style="cursor:pointer">
           <div>
@@ -375,6 +388,45 @@ function renderAddr() {
   else if (hist?.lastOutcome === 'vm') low.innerHTML = '<div class="last-outcome lo-vm">Voicemail last time</div>';
   else if (hist?.lastOutcome === 'no') low.innerHTML = '<div class="last-outcome lo-no">Said not interested before</div>';
   else low.innerHTML = '';
+  renderBriefSlot();
+}
+
+const BRIEF_CACHE = {};
+
+function briefHtml(b) {
+  return '<div class="brief-card">' +
+    '<div class="brief-label">Opener</div><div class="brief-open">' + escHtml(b.opener) + '</div>' +
+    '<div class="brief-label">Why this call</div><div class="brief-text">' + escHtml(b.angle) + '</div>' +
+    '<div class="brief-label">If they say...</div>' +
+    b.objections.map(o => '<div class="brief-obj"><b>' + escHtml(o.objection) + '</b><br><span>' + escHtml(o.response) + '</span></div>').join('') +
+    '</div>';
+}
+
+function renderBriefSlot() {
+  const a = OWNERS[sessionCur];
+  const slot = document.getElementById('brief-slot');
+  if (!a || !slot) return;
+  if (BRIEF_CACHE[a.id]) { slot.innerHTML = briefHtml(BRIEF_CACHE[a.id]); return; }
+  slot.innerHTML = '<button class="brief-btn" id="brief-btn" onclick="loadBrief()"><span>Get call briefing</span><span class="arr">AI</span></button>';
+}
+
+async function loadBrief() {
+  const a = OWNERS[sessionCur];
+  const slot = document.getElementById('brief-slot');
+  const btn = document.getElementById('brief-btn');
+  if (!a || !btn) return;
+  btn.disabled = true;
+  btn.firstElementChild.textContent = 'Preparing briefing...';
+  try {
+    const { briefing } = await callAI({ mode: 'briefing', homeowner_id: a.id });
+    BRIEF_CACHE[a.id] = briefing;
+    if (OWNERS[sessionCur] && OWNERS[sessionCur].id === a.id) slot.innerHTML = briefHtml(briefing);
+  } catch (e) {
+    if (OWNERS[sessionCur] && OWNERS[sessionCur].id === a.id) {
+      slot.innerHTML = '<div class="brief-err">' + escHtml(e.message) + '</div>' +
+        '<button class="brief-btn" id="brief-btn" onclick="loadBrief()"><span>Try briefing again</span><span class="arr">AI</span></button>';
+    }
+  }
 }
 
 async function logCall(outcome) {

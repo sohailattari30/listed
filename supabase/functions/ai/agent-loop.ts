@@ -1,8 +1,6 @@
 // A small, model-agnostic tool-use loop. The model call is injected, so the loop's rules
 // are tested with a scripted model and no network.
 
-import type { ToolFn } from './coach-tools.ts';
-
 export interface ContentBlock {
   type: string;
   [key: string]: unknown;
@@ -17,6 +15,17 @@ export interface Message {
   role: 'user' | 'assistant';
   content: string | ContentBlock[];
 }
+
+export interface ToolOut {
+  /** JSON sent back to the model. */
+  data: unknown;
+  /** Short human-readable line shown in the UI ("what the analyst checked"). */
+  summary: string;
+  /** The tool understood the call but rejected it (e.g. invalid input). The model sees `data` and can retry. */
+  isError?: boolean;
+}
+
+export type ToolFn = (input: unknown) => Promise<ToolOut>;
 
 export interface Step {
   tool: string;
@@ -37,6 +46,8 @@ export async function runAgent(opts: {
   createTurn: (messages: Message[]) => Promise<ModelTurn>;
   tools: Record<string, ToolFn>;
   maxTurns: number;
+  /** End the run as soon as this tool succeeds (a "submit answer" tool), without another model call. */
+  stopAfter?: string;
 }): Promise<AgentResult> {
   const messages: Message[] = [{ role: 'user', content: opts.firstMessage }];
   const steps: Step[] = [];
@@ -64,21 +75,22 @@ export async function runAgent(opts: {
       toolUses.map(async (use) => {
         const fn = opts.tools[use.name];
         if (!fn) {
-          return { block: { type: 'tool_result', tool_use_id: use.id, is_error: true, content: `Unknown tool ${use.name}` } };
+          return { name: use.name, ok: false, block: { type: 'tool_result', tool_use_id: use.id, is_error: true, content: `Unknown tool ${use.name}` } };
         }
         try {
           const out = await fn(use.input ?? {});
-          return {
-            block: { type: 'tool_result', tool_use_id: use.id, content: JSON.stringify(out.data) },
-            step: { tool: use.name, summary: out.summary },
-          };
+          const block: ContentBlock = { type: 'tool_result', tool_use_id: use.id, content: JSON.stringify(out.data) };
+          if (out.isError) return { name: use.name, ok: false, block: { ...block, is_error: true } };
+          return { name: use.name, ok: true, block, step: { tool: use.name, summary: out.summary } };
         } catch (error) {
           console.error('tool failed', use.name, error);
-          return { block: { type: 'tool_result', tool_use_id: use.id, is_error: true, content: 'Tool failed to read data.' } };
+          return { name: use.name, ok: false, block: { type: 'tool_result', tool_use_id: use.id, is_error: true, content: 'Tool failed to read data.' } };
         }
       }),
     );
     for (const o of outcomes) if ('step' in o && o.step) steps.push(o.step);
+
+    if (opts.stopAfter && outcomes.some((o) => o.ok && o.name === opts.stopAfter)) return { ok: true, text: '', steps };
     messages.push({ role: 'user', content: outcomes.map((o) => o.block) });
   }
 

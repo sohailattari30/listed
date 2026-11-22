@@ -16,6 +16,7 @@ const items = [
     label: 'Calls',
     icon: <path d="M5 4h4l2 4-2.5 1.5A11 11 0 0014.5 15L16 12.5l4 2V18a2 2 0 01-2 2A16 16 0 014 6a2 2 0 012-2" />,
   },
+  { to: '/markets', label: 'Markets', icon: <path d="M4 20V11M10 20V4M16 20v-6M22 20H2" /> },
   {
     to: '/contacts',
     label: 'Contacts',

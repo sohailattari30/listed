@@ -5,7 +5,6 @@ import { useAuth } from '../../auth/AuthProvider';
 import { useRequiredProfile } from '../../auth/guards';
 import { listCalls } from '../../lib/api';
 import { buildForecast, CALLS_PER_DAY } from '../../lib/forecast';
-import { CoachCard } from './CoachCard';
 import styles from './Today.module.css';
 
 const greetingFor = (hour: number) => (hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening');
@@ -73,8 +72,6 @@ export function Today() {
           </div>
         )}
       </div>
-
-      <CoachCard callCount={calls.data?.length} />
 
       <div className={styles.bottom}>
         <div className={styles.greeting}>

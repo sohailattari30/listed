@@ -5,7 +5,6 @@ import { insertCall, insertSession } from '../../lib/api';
 import type { HomeownerRow, Outcome } from '../../lib/database.types';
 import { buildHistory, progressPercent, recordCall, streetOf, summarizeHistory, truePeopleSearchUrl, type CallHistory } from '../../lib/dial';
 import { buildQueue, clearSnapshot, dailySeed, loadSnapshot, saveSnapshot, seededShuffle, type DialQueue } from '../../lib/queue';
-import { Briefing } from './Briefing';
 import styles from './Dial.module.css';
 
 interface Props {
@@ -173,8 +172,6 @@ export function DialSession({ userId, zip, city, homeowners, calls }: Props) {
           </div>
           {summary.badge && <div className={`${styles.lastOutcome} ${badgeClass[summary.badge.kind]}`}>{summary.badge.text}</div>}
         </div>
-
-        <Briefing key={owner.id} homeownerId={owner.id} />
 
         <a className={styles.tps} href={truePeopleSearchUrl(owner.address, owner.zip)} target="_blank" rel="noopener noreferrer">
           <div className={styles.phoneBlock}>

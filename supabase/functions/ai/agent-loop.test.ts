@@ -1,6 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { runAgent, type Message, type ModelTurn } from './agent-loop.ts';
-import type { ToolFn } from './coach-tools.ts';
+import { runAgent, type Message, type ModelTurn, type ToolFn } from './agent-loop.ts';
 
 /** A model that replays a fixed script and records what it was sent. */
 function scriptedModel(turns: ModelTurn[]) {
@@ -122,5 +121,53 @@ describe('runAgent', () => {
     const model = scriptedModel([{ stop_reason: 'tool_use', content: [text('hello')] }]);
     const result = await runAgent({ firstMessage: 'go', createTurn: model.createTurn, tools: {}, maxTurns: 3 });
     expect(result).toEqual({ ok: true, text: 'hello', steps: [] });
+  });
+
+  describe('stopAfter (a "submit answer" tool)', () => {
+    it('ends the run right after the tool succeeds, with no extra model call', async () => {
+      const model = scriptedModel([
+        { stop_reason: 'tool_use', content: [toolUse('a', 'stats')] },
+        { stop_reason: 'tool_use', content: [toolUse('b', 'submit', { answer: 1 })] },
+        { stop_reason: 'end_turn', content: [text('should never be asked for')] },
+      ]);
+      const result = await runAgent({
+        firstMessage: 'go',
+        createTurn: model.createTurn,
+        tools: { stats: okTool('read stats'), submit: okTool('submitted') },
+        maxTurns: 5,
+        stopAfter: 'submit',
+      });
+      expect(result).toEqual({
+        ok: true,
+        text: '',
+        steps: [
+          { tool: 'stats', summary: 'read stats' },
+          { tool: 'submit', summary: 'submitted' },
+        ],
+      });
+      expect(model.calls).toHaveLength(2);
+    });
+
+    it('lets the model see a rejection and try again; the run only ends on success', async () => {
+      let attempts = 0;
+      const submit: ToolFn = async () => {
+        attempts++;
+        return attempts === 1
+          ? { data: { error: 'zip 99999 is unknown' }, summary: 'rejected', isError: true }
+          : { data: { ok: true }, summary: 'submitted' };
+      };
+      const model = scriptedModel([
+        { stop_reason: 'tool_use', content: [toolUse('a', 'submit', { bad: true })] },
+        { stop_reason: 'tool_use', content: [toolUse('b', 'submit', { good: true })] },
+      ]);
+      const result = await runAgent({ firstMessage: 'go', createTurn: model.createTurn, tools: { submit }, maxTurns: 5, stopAfter: 'submit' });
+
+      const rejection = blocks<{ is_error?: boolean; content: string }>(model.calls[1]![2]!)[0]!;
+      expect(rejection.is_error).toBe(true);
+      expect(rejection.content).toContain('zip 99999 is unknown');
+      expect(result.ok).toBe(true);
+      expect(result.steps).toEqual([{ tool: 'submit', summary: 'submitted' }]);
+      expect(model.calls).toHaveLength(2);
+    });
   });
 });

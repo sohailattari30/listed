@@ -1,79 +1,88 @@
-// Pure analytics helpers. No Deno or Supabase imports so they run (and are tested) under Node.
+// Pure helpers. No Deno or Supabase imports, so they run (and are tested) under Node.
 
 export type Id = string | number;
-export type Outcome = 'sell' | 'vm' | 'no' | 'skip';
-export type OutcomeTally = Record<Outcome, number>;
-export type Segment = 'tenure' | 'zip';
 
-export interface SegmentRow {
-  segment: string;
-  calls: number;
+/** Homeowners who have owned this long are the "long-term owners" the app calls. */
+export const LONG_TENURE_YEARS = 10;
+
+export interface LocalZip {
+  zip: string;
+  homeowners: number;
+  longTenureShare: number;
+  medianTenureYears: number;
+}
+
+export interface PersonalZip {
+  zip: string;
+  conversations: number;
   hot: number;
-  hot_lead_rate: number | null;
+  hotRate: number;
 }
 
-export function tallyOutcomes(rows: ReadonlyArray<{ outcome: string }>): OutcomeTally {
-  const tally: OutcomeTally = { sell: 0, vm: 0, no: 0, skip: 0 };
+export function median(values: readonly number[]): number | null {
+  if (values.length === 0) return null;
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 ? (sorted[mid] as number) : ((sorted[mid - 1] as number) + (sorted[mid] as number)) / 2;
+}
+
+/** What the app can actually dial: per zip, how many homeowners and how long they have owned. */
+export function buildLocalIndex(rows: ReadonlyArray<{ zip: string; years_owned: number }>): Map<string, LocalZip> {
+  const years = new Map<string, number[]>();
   for (const row of rows) {
-    if (Object.hasOwn(tally, row.outcome)) tally[row.outcome as Outcome]++;
+    if (!Number.isFinite(row.years_owned)) continue;
+    const key = String(row.zip);
+    const list = years.get(key);
+    if (list) list.push(row.years_owned);
+    else years.set(key, [row.years_owned]);
   }
-  return tally;
-}
-
-/** Share of real conversations (not skips) that were hot leads. */
-export function hotLeadRate(tally: OutcomeTally): number | null {
-  const logged = tally.sell + tally.vm + tally.no;
-  return logged === 0 ? null : tally.sell / logged;
-}
-
-const isoDay = (d: Date): string => d.toISOString().slice(0, 10);
-
-/**
- * Consecutive UTC days with a session, ending today. If there is no session today yet the
- * streak is still alive, so counting starts from yesterday.
- */
-export function currentStreak(sessionDates: Iterable<string>, now: Date = new Date()): number {
-  const days = new Set(sessionDates);
-  const cursor = new Date(now);
-  if (!days.has(isoDay(cursor))) cursor.setUTCDate(cursor.getUTCDate() - 1);
-  let streak = 0;
-  while (days.has(isoDay(cursor))) {
-    streak++;
-    cursor.setUTCDate(cursor.getUTCDate() - 1);
+  const out = new Map<string, LocalZip>();
+  for (const [zip, list] of years) {
+    out.set(zip, {
+      zip,
+      homeowners: list.length,
+      longTenureShare: list.filter((y) => y >= LONG_TENURE_YEARS).length / list.length,
+      medianTenureYears: median(list) ?? 0,
+    });
   }
-  return streak;
+  return out;
 }
 
-export function tenureBucket(years: number): string {
-  if (!Number.isFinite(years)) return 'unknown';
-  if (years < 5) return '0-4 years';
-  if (years < 10) return '5-9 years';
-  if (years < 20) return '10-19 years';
-  return '20+ years';
-}
-
-export function groupConversion(
+/** This user's own results per zip. Skips do not count; calls whose homeowner no longer exists are tallied separately. */
+export function personalByZip(
   calls: ReadonlyArray<{ homeowner_id: Id; outcome: string }>,
-  owners: ReadonlyMap<Id, { zip: string; years_owned: number }>,
-  segment: Segment,
-): SegmentRow[] {
-  const groups = new Map<string, { calls: number; hot: number }>();
+  owners: ReadonlyMap<Id, { zip: string }>,
+): { byZip: Map<string, PersonalZip>; unmatched: number } {
+  const tally = new Map<string, { conversations: number; hot: number }>();
+  let unmatched = 0;
   for (const call of calls) {
     if (call.outcome === 'skip') continue;
     const owner = owners.get(call.homeowner_id);
-    if (!owner) continue;
-    const key = segment === 'zip' ? String(owner.zip) : tenureBucket(Number(owner.years_owned));
-    const group = groups.get(key) ?? { calls: 0, hot: 0 };
-    group.calls++;
-    if (call.outcome === 'sell') group.hot++;
-    groups.set(key, group);
+    if (!owner) {
+      unmatched++;
+      continue;
+    }
+    const zip = String(owner.zip);
+    const t = tally.get(zip) ?? { conversations: 0, hot: 0 };
+    t.conversations++;
+    if (call.outcome === 'sell') t.hot++;
+    tally.set(zip, t);
   }
-  return [...groups.entries()]
-    .map(([name, g]) => ({
-      segment: name,
-      calls: g.calls,
-      hot: g.hot,
-      hot_lead_rate: g.calls ? g.hot / g.calls : null,
-    }))
-    .sort((a, b) => b.calls - a.calls || a.segment.localeCompare(b.segment));
+  const byZip = new Map<string, PersonalZip>();
+  for (const [zip, t] of tally) byZip.set(zip, { zip, ...t, hotRate: t.hot / t.conversations });
+  return { byZip, unmatched };
+}
+
+/** Where `v` sits among `values` from 0 to 1 (ties count half). Nulls are ignored. */
+export function percentileRank(values: ReadonlyArray<number | null>, v: number): number {
+  let below = 0;
+  let equal = 0;
+  let n = 0;
+  for (const x of values) {
+    if (x === null) continue;
+    n++;
+    if (x < v) below++;
+    else if (x === v) equal++;
+  }
+  return n === 0 ? 0.5 : (below + equal / 2) / n;
 }

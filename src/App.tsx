@@ -6,10 +6,11 @@ import { FullScreenMessage } from './components/FullScreenMessage';
 import { Login } from './pages/Login/Login';
 
 // Everything behind the login page is split into its own chunk, so signed-out visitors
-// don't download the dialer, the coach or the AI client.
+// don't download the dialer or the market analyst.
 const AuthCallback = lazy(() => import('./pages/AuthCallback').then((m) => ({ default: m.AuthCallback })));
 const Contacts = lazy(() => import('./pages/Contacts/Contacts').then((m) => ({ default: m.Contacts })));
 const Dial = lazy(() => import('./pages/Dial/Dial').then((m) => ({ default: m.Dial })));
+const Markets = lazy(() => import('./pages/Markets/Markets').then((m) => ({ default: m.Markets })));
 const Onboarding = lazy(() => import('./pages/Onboarding/Onboarding').then((m) => ({ default: m.Onboarding })));
 const Progress = lazy(() => import('./pages/Progress/Progress').then((m) => ({ default: m.Progress })));
 const Today = lazy(() => import('./pages/Today/Today').then((m) => ({ default: m.Today })));
@@ -31,6 +32,7 @@ export function App() {
           </Route>
           <Route element={<RequireProfile />}>
             <Route path="/dial" element={<Dial />} />
+            <Route path="/markets" element={<Markets />} />
             <Route path="/progress" element={<Progress />} />
           </Route>
           <Route path="/contacts" element={<Contacts />} />

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
@@ -7,10 +7,8 @@ import { MemoryRouter } from 'react-router-dom';
 const mocks = vi.hoisted(() => ({
   insertCall: vi.fn(),
   insertSession: vi.fn(),
-  fetchBriefing: vi.fn(),
 }));
 vi.mock('../../lib/api', () => ({ insertCall: mocks.insertCall, insertSession: mocks.insertSession }));
-vi.mock('../../lib/ai', () => ({ fetchBriefing: mocks.fetchBriefing }));
 
 import type { HomeownerRow } from '../../lib/database.types';
 import { freshQueue, loadSnapshot, saveSnapshot } from '../../lib/queue';
@@ -113,29 +111,5 @@ describe('DialSession', () => {
     const first = freshQueue(homeowners, '94536').owners[0]!;
     renderSession([{ homeowner_id: first.id as number, outcome: 'sell' }]);
     expect(screen.getByText('Called 1x · Previously interested')).toBeInTheDocument();
-  });
-
-  it('fetches a briefing only when asked, and shows it', async () => {
-    const user = userEvent.setup();
-    mocks.fetchBriefing.mockResolvedValue({
-      opener: 'Hi, this is Alex.',
-      angle: 'Long-term owner.',
-      objections: [{ objection: 'Not selling', response: 'No problem.' }],
-    });
-    renderSession();
-    expect(mocks.fetchBriefing).not.toHaveBeenCalled();
-    await user.click(screen.getByRole('button', { name: /Get call briefing/ }));
-    expect(await screen.findByText('Hi, this is Alex.')).toBeInTheDocument();
-    expect(mocks.fetchBriefing).toHaveBeenCalledTimes(1);
-    expect(screen.getByText('Not selling')).toBeInTheDocument();
-  });
-
-  it('shows a briefing error with a retry button', async () => {
-    const user = userEvent.setup();
-    mocks.fetchBriefing.mockRejectedValueOnce(new Error('AI is not configured yet.'));
-    renderSession();
-    await user.click(screen.getByRole('button', { name: /Get call briefing/ }));
-    expect(await screen.findByRole('alert')).toHaveTextContent('AI is not configured yet.');
-    await waitFor(() => expect(screen.getByRole('button', { name: /Try briefing again/ })).toBeEnabled());
   });
 });

@@ -1,0 +1,174 @@
+// Builds supabase/functions/ai/market-data.ts from two public datasets.
+//
+//   Realtor.com Economic Research - monthly zip-level inventory metrics (new listings, pending, days on market, ...)
+//   Zillow Research               - monthly home value index (ZHVI) per zip
+//
+// Both files are streamed and filtered line by line, so nothing large is stored on disk.
+// Refresh the snapshot with:  npm run data:refresh
+
+import { createInterface } from 'node:readline';
+import { Readable } from 'node:stream';
+import { writeFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+
+const ZILLOW_URL = 'https://files.zillowstatic.com/research/public_csvs/zhvi/Zip_zhvi_uc_sfrcondo_tier_0.33_0.67_sm_sa_month.csv';
+const REALTOR_URL = 'https://econdata.s3-us-west-2.amazonaws.com/Reports/Core/RDC_Inventory_Core_Metrics_Zip_History.csv';
+const OUT = fileURLToPath(new URL('../supabase/functions/ai/market-data.ts', import.meta.url));
+
+const METROS = ['San Francisco', 'San Jose'];
+const MONTHS_KEPT = 15; // enough for a 3-month window now vs the same 3 months a year earlier
+
+function parseCsvLine(line) {
+  const out = [];
+  let cur = '';
+  let quoted = false;
+  for (let i = 0; i < line.length; i++) {
+    const c = line[i];
+    if (quoted) {
+      if (c === '"') {
+        if (line[i + 1] === '"') {
+          cur += '"';
+          i++;
+        } else quoted = false;
+      } else cur += c;
+    } else if (c === '"') quoted = true;
+    else if (c === ',') {
+      out.push(cur);
+      cur = '';
+    } else cur += c;
+  }
+  out.push(cur);
+  return out;
+}
+
+const num = (s) => {
+  if (s === undefined || s === '') return null;
+  const n = Number(s);
+  return Number.isFinite(n) ? n : null;
+};
+
+async function* lines(url, label) {
+  const res = await fetch(url);
+  if (!res.ok || !res.body) throw new Error(`${label}: HTTP ${res.status}`);
+  const total = Number(res.headers.get('content-length') ?? 0);
+  let seen = 0;
+  let nextReport = 0.1;
+  const input = Readable.fromWeb(res.body);
+  input.on('data', (chunk) => {
+    seen += chunk.length;
+    if (total && seen / total >= nextReport) {
+      console.log(`  ${label}: ${Math.round((seen / total) * 100)}%`);
+      nextReport += 0.1;
+    }
+  });
+  for await (const line of createInterface({ input, crlfDelay: Infinity })) yield line;
+}
+
+async function readZillow() {
+  console.log('Zillow home values...');
+  let header = null;
+  let dateCols = [];
+  const zips = new Map();
+  for await (const line of lines(ZILLOW_URL, 'zillow')) {
+    if (!header) {
+      header = parseCsvLine(line);
+      dateCols = header.map((h, i) => ({ h, i })).filter(({ h }) => /^\d{4}-\d{2}-\d{2}$/.test(h));
+      continue;
+    }
+    const f = parseCsvLine(line);
+    const metro = f[7] ?? '';
+    if (!METROS.some((m) => metro.includes(m))) continue;
+    const zip = (f[2] ?? '').padStart(5, '0');
+    const last = dateCols.slice(-MONTHS_KEPT);
+    zips.set(zip, {
+      city: f[6] ?? '',
+      county: (f[8] ?? '').replace(/ County$/, ''),
+      metro,
+      zhvi: last.map(({ i }) => num(f[i])),
+      zhviMonths: last.map(({ h }) => h.slice(0, 7)),
+    });
+  }
+  return zips;
+}
+
+async function readRealtor(wanted) {
+  console.log('Realtor.com listing activity...');
+  let col = null;
+  const rows = new Map(); // zip -> Map(month -> row)
+  for await (const line of lines(REALTOR_URL, 'realtor')) {
+    if (!col) {
+      col = Object.fromEntries(parseCsvLine(line).map((h, i) => [h, i]));
+      continue;
+    }
+    // "202610,94536,..." - check the zip before paying for a full parse.
+    const zip = line.slice(7, line.indexOf(',', 7));
+    if (!wanted.has(zip)) continue;
+    const f = parseCsvLine(line);
+    const month = f[col.month_date_yyyymm];
+    if (!rows.has(zip)) rows.set(zip, new Map());
+    rows.get(zip).set(month, [
+      Number(month),
+      num(f[col.median_listing_price]),
+      num(f[col.active_listing_count]),
+      num(f[col.median_days_on_market]),
+      num(f[col.new_listing_count]),
+      num(f[col.pending_listing_count]),
+      num(f[col.pending_ratio]),
+      num(f[col.price_reduced_share]),
+      num(f[col.quality_flag]),
+    ]);
+  }
+  return rows;
+}
+
+const zillow = await readZillow();
+console.log(`  ${zillow.size} Bay Area zips in Zillow`);
+const realtor = await readRealtor(new Set(zillow.keys()));
+console.log(`  ${realtor.size} of them also in Realtor.com`);
+
+const data = [];
+let latestMonth = 0;
+for (const [zip, z] of [...zillow.entries()].sort(([a], [b]) => a.localeCompare(b))) {
+  const byMonth = realtor.get(zip);
+  if (!byMonth) continue;
+  const months = [...byMonth.keys()].sort();
+  const keep = months.slice(-MONTHS_KEPT).map((m) => byMonth.get(m));
+  latestMonth = Math.max(latestMonth, keep.at(-1)?.[0] ?? 0);
+  data.push({ zip, city: z.city, county: z.county, metro: z.metro, rc: keep, zhvi: z.zhvi });
+}
+
+const zhviAsOf = [...zillow.values()][0]?.zhviMonths.at(-1) ?? '';
+const body = `// GENERATED by scripts/build-market-data.mjs on ${new Date().toISOString().slice(0, 10)}. Do not edit by hand.
+// Sources: Realtor.com Economic Research (monthly zip inventory metrics) and Zillow Research (ZHVI home value index).
+// Re-generate with: npm run data:refresh
+
+/**
+ * Column order of each \`rc\` row (one per month, oldest first).
+ * qualityFlag is Realtor.com's quality_flag: 1 marks small or unreliable samples (tiny zips carry it).
+ */
+export const RC_COLUMNS = ['month', 'medianListPrice', 'activeListings', 'medianDaysOnMarket', 'newListings', 'pendingListings', 'pendingRatio', 'priceReducedShare', 'qualityFlag'] as const;
+
+export type RcRow = [month: number, ...rest: (number | null)[]];
+
+export interface RawZipMarket {
+  zip: string;
+  city: string;
+  county: string;
+  metro: string;
+  /** Realtor.com monthly rows, oldest first. */
+  rc: RcRow[];
+  /** Zillow home value index, monthly, oldest first, ending at ZHVI_AS_OF. */
+  zhvi: (number | null)[];
+}
+
+export const MARKET_SOURCES = {
+  realtorAsOf: ${latestMonth},
+  zhviAsOf: '${zhviAsOf}',
+  realtor: 'Realtor.com Economic Research - Monthly Housing Data (zip level)',
+  zillow: 'Zillow Research - Home Value Index (ZHVI), single-family and condo, mid tier, smoothed and seasonally adjusted',
+} as const;
+
+export const MARKET_DATA: RawZipMarket[] = ${JSON.stringify(data)};
+`;
+writeFileSync(OUT, body);
+console.log(`Wrote ${data.length} zips to ${OUT} (${Math.round(body.length / 1024)} KB). Realtor.com as of ${latestMonth}, Zillow as of ${zhviAsOf}.`);

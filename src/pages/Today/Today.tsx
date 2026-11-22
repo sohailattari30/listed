@@ -74,7 +74,7 @@ export function Today() {
         )}
       </div>
 
-      <CoachCard />
+      <CoachCard callCount={calls.data?.length} />
 
       <div className={styles.bottom}>
         <div className={styles.greeting}>

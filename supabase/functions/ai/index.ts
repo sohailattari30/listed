@@ -34,6 +34,8 @@ function json(body: unknown, status = 200) {
 
 type Sb = ReturnType<typeof createClient>;
 
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 // ---------------------------------------------------------------------------
 // Mode 1: briefing (single call, structured output)
 // ---------------------------------------------------------------------------
@@ -121,9 +123,12 @@ function supabaseCoachData(sb: Sb, userId: string): CoachData {
       return (data ?? []) as { session_date: string; calls_made: number; hot_leads: number }[];
     },
     async homeowners(ids) {
+      // homeowners.id is a uuid column; older call rows can hold ids like "o1", and one bad
+      // value makes Postgres reject the whole lookup. Those calls simply won't match an owner.
+      const valid = ids.filter((id) => typeof id === 'string' && UUID.test(id));
       const rows: { id: string | number; zip: string; years_owned: number }[] = [];
-      for (let i = 0; i < ids.length; i += 100) {
-        const { data, error } = await sb.from('homeowners').select('id,zip,years_owned').in('id', ids.slice(i, i + 100));
+      for (let i = 0; i < valid.length; i += 100) {
+        const { data, error } = await sb.from('homeowners').select('id,zip,years_owned').in('id', valid.slice(i, i + 100));
         if (error) fail(error.message);
         rows.push(...((data ?? []) as typeof rows));
       }

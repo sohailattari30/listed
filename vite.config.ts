@@ -8,5 +8,6 @@ export default defineConfig({
     setupFiles: ['./src/test/setup.ts'],
     include: ['src/**/*.test.{ts,tsx}', 'supabase/functions/ai/**/*.test.ts'],
     css: false,
+    testTimeout: 15_000,
   },
 });

@@ -80,6 +80,20 @@ describe('get_conversion_by_segment', () => {
     expect((out.data as { grouped_by: string }).grouped_by).toBe('zip code');
   });
 
+  it('reports calls whose homeowner no longer exists instead of failing or hiding them', async () => {
+    const data = fakeData({
+      calls: async () => [
+        { homeowner_id: 1, outcome: 'sell' },
+        { homeowner_id: 'o1', outcome: 'sell' },
+        { homeowner_id: 'o2', outcome: 'no' },
+      ],
+      homeowners: async (ids) => ids.filter((id) => id === 1).map((id) => ({ id, zip: '94536', years_owned: 12 })),
+    });
+    const out = await createCoachTools(data, now).get_conversion_by_segment!({});
+    expect((out.data as { unmatched_calls: number }).unmatched_calls).toBe(2);
+    expect(out.summary).toBe('Compared 1 ownership-length groups across 1 calls (2 older calls had no matching homeowner)');
+  });
+
   it('does not query homeowners when there are no calls', async () => {
     let looked = false;
     const data = fakeData({

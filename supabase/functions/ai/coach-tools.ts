@@ -88,9 +88,18 @@ export function createCoachTools(data: CoachData, now: () => Date = () => new Da
     const owners = new Map<Id, { zip: string; years_owned: number }>();
     for (const o of ids.length ? await data.homeowners(ids) : []) owners.set(o.id, o);
     const segments = groupConversion(calls, owners, segment);
+    const matched = segments.reduce((n, s) => n + s.calls, 0);
+    const unmatched = calls.length - matched;
     return {
-      data: { grouped_by: segment === 'zip' ? 'zip code' : 'years owned', segments },
-      summary: `Compared ${segments.length} ${segment === 'zip' ? 'zip codes' : 'ownership-length groups'} across ${calls.length} calls`,
+      data: {
+        grouped_by: segment === 'zip' ? 'zip code' : 'years owned',
+        segments,
+        unmatched_calls: unmatched,
+        note: unmatched > 0 ? 'unmatched_calls are calls whose homeowner no longer exists (likely old test data); they are left out of the segments.' : undefined,
+      },
+      summary:
+        `Compared ${segments.length} ${segment === 'zip' ? 'zip codes' : 'ownership-length groups'} across ${matched} calls` +
+        (unmatched > 0 ? ` (${unmatched} older calls had no matching homeowner)` : ''),
     };
   };
 
